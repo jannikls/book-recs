@@ -124,5 +124,15 @@
             });
         }
     </script>
+<script src="/static/js/book_modal.js"></script>
+<script>
+  document.querySelectorAll('.book-card').forEach(card => {
+    card.addEventListener('click', function(e) {
+      if (e.target.closest('span.thumb')) return; // Don't open modal on thumb click
+      const book = JSON.parse(this.getAttribute('data-book'));
+      showBookModal(book);
+    });
+  });
+</script>
 </body>
 </html>

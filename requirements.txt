@@ -15,3 +15,5 @@ matplotlib
 scikit-learn
 numpy
 umap-learn
+httpx
+beautifulsoup4

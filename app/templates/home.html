@@ -29,9 +29,22 @@
 <body>
     <div class="container">
         <h1>Welcome to Book Recommender</h1>
-        <button class="oauth-btn goodreads" onclick="connectGoodreads()">Connect Goodreads</button>
-        <button class="oauth-btn amazon" onclick="connectAmazon()">Connect Amazon</button>
-        <p style="margin-top:2em; color:#888;">(OAuth integration coming soon)</p>
+        <p style="margin-bottom:1.5em; font-size:1.1em; color:#444;">
+            Discover books, join private clusters, and share your community's unique reading taste.<br>
+            <b>New:</b> Social Clusters, Niche Analytics, and "Wrapped" Visual Sharing!
+        </p>
+        <a href="/dashboard" class="oauth-btn" style="background:#007bff;color:#fff;">📊 Dashboard</a>
+        <a href="/upload-csv" class="oauth-btn" style="background:#28a745;color:#fff;">⬆️ Import Goodreads CSV</a>
+        <a href="/clusters/1/niche-spots" class="oauth-btn" style="background:#ff9800;color:#fff;">🌟 Cluster Niche Spots (Demo)</a>
+        <a href="/clusters/1/network" class="oauth-btn" style="background:#6f42c1;color:#fff;">🕸️ Cluster Network (Demo)</a>
+        <div style="margin:2em 0 1em 0; color:#555; font-size:1em;">
+            <b>How Social Clusters Work:</b><br>
+            - Spin up a "club" with friends<br>
+            - Aggregate your book taste and discover hidden gems<br>
+            - Explore "niche spots" and visualize your club's unique reading profile<br>
+            - Share your cluster's "Wrapped" with a single click!
+        </div>
+        <p style="margin-top:2em; color:#888; font-size:0.95em;">(OAuth integration coming soon)</p>
     </div>
     <script>
         function connectGoodreads() {
@@ -43,5 +56,14 @@
             alert('Amazon integration coming soon!');
         }
     </script>
+<script src="/static/js/book_modal.js"></script>
+<script>
+  document.querySelectorAll('.book-card').forEach(card => {
+    card.addEventListener('click', function(e) {
+      const book = JSON.parse(this.getAttribute('data-book'));
+      showBookModal(book);
+    });
+  });
+</script>
 </body>
 </html>

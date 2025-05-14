@@ -13,6 +13,150 @@ import numpy as np
 app = FastAPI()
 templates = Jinja2Templates(directory="app/templates")
 
+# --- Import and include reading list API router ---
+from .api_reading_lists import router as reading_lists_router
+app.include_router(reading_lists_router)
+
+from fastapi import Path
+from fastapi import Request
+from fastapi import Form, Body
+
+@app.get("/clusters/{cluster_id}/niche-spots", response_class=HTMLResponse)
+def cluster_niche_spots_page(request: Request, cluster_id: int = Path(...)):
+    # Just render the template, React fetches the data
+    return templates.TemplateResponse("cluster_niche_spots.html", {"request": request})
+
+@app.get("/reading-lists/new", response_class=HTMLResponse)
+def reading_list_new_page(request: Request):
+    return templates.TemplateResponse("reading_list_new.html", {"request": request})
+
+@app.post("/api/reading-lists")
+def create_reading_list(payload: dict = Body(...)):
+    name = payload.get("name")
+    url = payload.get("url")
+    if not name or not url:
+        return JSONResponse(status_code=400, content={"detail": "Missing name or url."})
+    session_gen = db.get_db()
+    try:
+        session = next(session_gen)
+        from datetime import datetime
+        rl = models.ReadingList(name=name, url=url, last_fetched=datetime.utcnow().isoformat())
+        session.add(rl)
+        session.commit()
+        return {"id": rl.id, "name": rl.name, "url": rl.url}
+    finally:
+        session_gen.close()
+
+from fastapi import UploadFile, File
+import os
+
+@app.post("/clusters/{cluster_id}/niche-spots/export")
+def export_niche_spots(cluster_id: int = Path(...), image: UploadFile = File(...)):
+    # Save uploaded PNG to disk in a public folder
+    export_dir = os.path.join("app", "static", "exports")
+    os.makedirs(export_dir, exist_ok=True)
+    filename = f"cluster{cluster_id}_niche_spots.png"
+    file_path = os.path.join(export_dir, filename)
+    with open(file_path, "wb") as f:
+        f.write(image.file.read())
+    url = f"/static/exports/{filename}"
+    return {"url": url}
+
+@app.get("/clusters/{cluster_id}/network", response_class=HTMLResponse)
+def cluster_network_page(request: Request, cluster_id: int = Path(...)):
+    return templates.TemplateResponse("cluster_network.html", {"request": request})
+
+@app.get("/api/clusters/{cluster_id}/network")
+def get_cluster_network(cluster_id: int = Path(...)):
+    session_gen = db.get_db()
+    try:
+        session = next(session_gen)
+        # Get all ClusterBook entries for this cluster with non-null vector
+        cluster_books = (
+            session.query(models.ClusterBook, models.Book)
+            .join(models.Book, models.ClusterBook.book_id == models.Book.id)
+            .filter(models.ClusterBook.cluster_id == cluster_id, models.Book.vector != None)
+            .all()
+        )
+        result = []
+        for cb, book in cluster_books:
+            result.append({
+                "book_id": book.id,
+                "title": book.title,
+                "author": book.author,
+                "cover_url": book.cover_url,
+                "cluster_niche_score": cb.cluster_niche_score,
+                "vector": book.vector
+            })
+        return result
+    finally:
+        session_gen.close()
+
+@app.get("/api/clusters/{cluster_id}/niche-spots")
+def get_cluster_niche_spots(cluster_id: int = Path(...), k: int = 10):
+    session_gen = db.get_db()
+    try:
+        session = next(session_gen)
+        # Query top k books for this cluster by niche score
+        niche_books = (
+            session.query(models.ClusterBook)
+            .filter(models.ClusterBook.cluster_id == cluster_id)
+            .order_by(models.ClusterBook.cluster_niche_score.desc())
+            .limit(k)
+            .all()
+        )
+        result = []
+        for cb in niche_books:
+            book = session.query(models.Book).filter(models.Book.id == cb.book_id).first()
+            if book:
+                result.append({
+                    "book_id": cb.book_id,
+                    "title": book.title,
+                    "author": book.author,
+                    "cover_url": book.cover_url,
+                    "read_count": cb.read_count,
+                    "cluster_niche_score": cb.cluster_niche_score
+                })
+        return result
+    finally:
+        session_gen.close()
+
+# Background job: Compute cluster niche scores
+# For each cluster, count how many cluster users have read each book
+# Set cluster_niche_score = 1 / log(1 + read_count)
+# Upsert into ClusterBook.read_count and .cluster_niche_score
+
+def compute_cluster_niche_scores(session):
+    clusters = session.query(models.Cluster).all()
+    for cluster in clusters:
+        # Find all users in this cluster (assume a ClusterUser join table will exist)
+        cluster_user_ids = [u.id for u in getattr(cluster, 'users', [])]  # To be implemented: cluster.users relationship
+        if not cluster_user_ids:
+            continue
+        # Count how many users in the cluster have read each book
+        book_counts = (
+            session.query(models.UserBook.book_id, math.func.count(models.UserBook.user_id))
+            .filter(models.UserBook.user_id.in_(cluster_user_ids))
+            .group_by(models.UserBook.book_id)
+            .all()
+        )
+        for book_id, read_count in book_counts:
+            niche_score = 1.0 / math.log(1 + read_count)
+            # Upsert into ClusterBook
+            cluster_book = session.query(models.ClusterBook).filter_by(cluster_id=cluster.id, book_id=book_id).first()
+            if cluster_book:
+                cluster_book.read_count = read_count
+                cluster_book.cluster_niche_score = niche_score
+            else:
+                cluster_book = models.ClusterBook(
+                    cluster_id=cluster.id,
+                    book_id=book_id,
+                    read_count=read_count,
+                    cluster_niche_score=niche_score,
+                )
+                session.add(cluster_book)
+        session.commit()
+
 from fastapi.responses import HTMLResponse
 import io
 import base64

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cluster Niche Spots</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:400,700&display=swap">
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f6f8fa; margin: 0; }
+        .container { max-width: 900px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; padding: 2em; }
+        h2 { text-align: center; }
+        .bar-label {
+            writing-mode: vertical-rl;
+            transform: rotate(180deg);
+            white-space: nowrap;
+            font-size: 0.85em;
+            text-align: center;
+            margin-top: 0.5em;
+        }
+        .book-cover {
+            width: 40px;
+            height: 60px;
+            object-fit: cover;
+            display: block;
+            margin: 0 auto 0.2em auto;
+        }
+    </style>
+    <!-- Recharts + React via CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h2>Cluster Niche Spots</h2>
+        <button id="share-btn" style="float:right;margin-bottom:1em;">Share</button>
+        <div id="chart-root"></div>
+    </div>
+    <script>
+    const { useEffect, useState } = React;
+    const { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } = Recharts;
+    
+    function BookTooltip({ active, payload, label }) {
+        if (!active || !payload || !payload.length) return null;
+        const d = payload[0].payload;
+        return (
+            React.createElement('div', { style: { background: '#fff', border: '1px solid #ccc', padding: '1em', borderRadius: 6 } },
+                React.createElement('div', { style: { fontWeight: 'bold', marginBottom: 4 } }, d.title),
+                React.createElement('div', null, 'Author: ' + d.author),
+                React.createElement('div', null, 'Read count: ' + d.read_count)
+            )
+        );
+    }
+
+    function NicheSpotsChart({ clusterId, k }) {
+        const [data, setData] = useState([]);
+        useEffect(() => {
+            fetch(`/clusters/${clusterId}/niche-spots?k=${k}`)
+                .then(r => r.json())
+                .then(setData);
+        }, [clusterId, k]);
+        return (
+            React.createElement(ResponsiveContainer, { width: '100%', height: 400 },
+                React.createElement(BarChart, { data, margin: { top: 30, right: 30, left: 20, bottom: 70 } },
+                    React.createElement(XAxis, {
+                        dataKey: 'title',
+                        interval: 0,
+                        tick: ({ x, y, payload, index }) => {
+                            const d = data[index];
+                            return (
+                                React.createElement('g', { transform: `translate(${x},${y})` },
+                                    d.cover_url && React.createElement('image', {
+                                        href: d.cover_url,
+                                        x: -20,
+                                        y: 0,
+                                        width: 40,
+                                        height: 60,
+                                    }),
+                                    React.createElement('text', {
+                                        x: 0,
+                                        y: 65,
+                                        textAnchor: 'middle',
+                                        style: { fontSize: '0.8em' },
+                                        transform: 'rotate(-45 0,65)'
+                                    }, d.title.length > 18 ? d.title.slice(0, 16) + '…' : d.title)
+                                )
+                            );
+                        },
+                        height: 90
+                    }),
+                    React.createElement(YAxis, {
+                        label: { value: 'Niche Score', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle' } },
+                        width: 80
+                    }),
+                    React.createElement(Tooltip, { content: BookTooltip }),
+                    React.createElement(Bar, { dataKey: 'cluster_niche_score', fill: '#007bff', radius: [4, 4, 0, 0] })
+                )
+            )
+        );
+    }
+
+    // Parse cluster id from URL
+    function getClusterIdFromUrl() {
+        const m = window.location.pathname.match(/\/clusters\/(\d+)\/niche-spots/);
+        return m ? parseInt(m[1], 10) : 1;
+    }
+
+    ReactDOM.createRoot(document.getElementById('chart-root')).render(
+        React.createElement(NicheSpotsChart, { clusterId: getClusterIdFromUrl(), k: 10 })
+    );
+    // --- Share button logic ---
+document.getElementById('share-btn').onclick = async function() {
+    // Find the SVG node inside the chart
+    const svg = document.querySelector('#chart-root svg');
+    if (!svg) return alert('Chart not rendered yet!');
+    // Serialize SVG
+    const svgData = new XMLSerializer().serializeToString(svg);
+    // Optionally convert to PNG
+    const canvas = document.createElement('canvas');
+    const bbox = svg.getBBox ? svg.getBBox() : {width: 800, height: 400};
+    canvas.width = bbox.width || 800;
+    canvas.height = bbox.height || 400;
+    const ctx = canvas.getContext('2d');
+    const img = new window.Image();
+    const svgBlob = new Blob([svgData], {type: 'image/svg+xml;charset=utf-8'});
+    const url = URL.createObjectURL(svgBlob);
+    img.onload = async function() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        URL.revokeObjectURL(url);
+        // Convert to PNG
+        canvas.toBlob(async function(blob) {
+            // POST to backend
+            const clusterId = getClusterIdFromUrl();
+            const formData = new FormData();
+            formData.append('image', blob, 'niche-spots.png');
+            const resp = await fetch(`/clusters/${clusterId}/niche-spots/export`, {
+                method: 'POST',
+                body: formData
+            });
+            if (resp.ok) {
+                const data = await resp.json();
+                // Show download link
+                window.open(data.url, '_blank');
+            } else {
+                alert('Export failed!');
+            }
+        }, 'image/png');
+    };
+    img.src = url;
+};
+</script>
+</body>
+</html>

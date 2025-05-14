@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cluster Book Network</title>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Inter:400,700&display=swap">
+    <style>
+        body { font-family: 'Inter', sans-serif; background: #f6f8fa; margin: 0; }
+        .container { max-width: 1000px; margin: 40px auto; background: #fff; border-radius: 8px; box-shadow: 0 2px 8px #0001; padding: 2em; }
+        h2 { text-align: center; }
+        #network-root { height: 700px; }
+    </style>
+    <!-- React + Force-Graph via CDN -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/force-graph@1.44.0/dist/force-graph.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h2>Cluster Book Network</h2>
+        <div id="network-root"></div>
+    </div>
+    <script>
+    const { useEffect, useRef } = React;
+    // Helper: Cosine similarity
+    function cosineSim(a, b) {
+        let dot = 0, an = 0, bn = 0;
+        for (let i = 0; i < a.length; i++) {
+            dot += a[i] * b[i];
+            an += a[i] * a[i];
+            bn += b[i] * b[i];
+        }
+        return dot / (Math.sqrt(an) * Math.sqrt(bn));
+    }
+    // React component
+    function ClusterNetwork({ clusterId }) {
+        const fgRef = useRef();
+        useEffect(() => {
+            fetch(`/api/clusters/${clusterId}/network`)
+                .then(r => r.json())
+                .then(data => {
+                    // Build nodes
+                    const nodes = data.map(b => ({
+                        id: b.book_id,
+                        title: b.title,
+                        author: b.author,
+                        cover_url: b.cover_url,
+                        cluster_niche_score: b.cluster_niche_score,
+                        vector: b.vector
+                    }));
+                    // Build edges (cosine_sim > 0.8)
+                    const links = [];
+                    for (let i = 0; i < nodes.length; i++) {
+                        for (let j = i + 1; j < nodes.length; j++) {
+                            if (nodes[i].vector && nodes[j].vector) {
+                                const sim = cosineSim(nodes[i].vector, nodes[j].vector);
+                                if (sim > 0.8) {
+                                    links.push({ source: nodes[i].id, target: nodes[j].id, sim });
+                                }
+                            }
+                        }
+                    }
+                    // Render force-graph
+                    const fg = ForceGraph()(document.getElementById('network-root'))
+                        .graphData({ nodes, links })
+                        .nodeId('id')
+                        .nodeLabel(n => `${n.title} by ${n.author}`)
+                        .nodeVal(n => Math.max(3, n.cluster_niche_score * 20))
+                        .nodeCanvasObject((node, ctx, globalScale) => {
+                            // Draw cover image if available
+                            if (node.cover_url) {
+                                const img = new window.Image();
+                                img.src = node.cover_url;
+                                ctx.save();
+                                ctx.beginPath();
+                                ctx.arc(node.x, node.y, 18, 0, 2 * Math.PI, false);
+                                ctx.clip();
+                                ctx.drawImage(img, node.x - 18, node.y - 27, 36, 54);
+                                ctx.restore();
+                            } else {
+                                ctx.beginPath();
+                                ctx.arc(node.x, node.y, 18, 0, 2 * Math.PI, false);
+                                ctx.fillStyle = '#007bff';
+                                ctx.fill();
+                            }
+                        })
+                        .linkWidth(l => l.sim * 2)
+                        .linkColor(() => 'rgba(0,0,0,0.15)')
+                        .width(950)
+                        .height(650)
+                        .onNodeHover(node => {
+                            if (node) {
+                                fg.tooltip(`${node.title} by ${node.author}\nNiche score: ${node.cluster_niche_score.toFixed(2)}`);
+                            }
+                        });
+                });
+        }, [clusterId]);
+        return null;
+    }
+    function getClusterIdFromUrl() {
+        const m = window.location.pathname.match(/\/clusters\/(\d+)\/network/);
+        return m ? parseInt(m[1], 10) : 1;
+    }
+    ReactDOM.createRoot(document.getElementById('network-root')).render(
+        React.createElement(ClusterNetwork, { clusterId: getClusterIdFromUrl() })
+    );
+    </script>
+</body>
+</html>
