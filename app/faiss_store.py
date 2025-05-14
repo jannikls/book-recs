@@ -5,7 +5,7 @@ import os
 class FaissStore:
     index = None
     id_map = {}
-    vector_dim = 384  # Example dimension, adjust as needed
+    vector_dim = 768  # all-mpnet-base-v2 outputs 768-dim vectors
     store_path = "faiss.index"
 
     @classmethod

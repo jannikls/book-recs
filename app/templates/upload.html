@@ -58,17 +58,31 @@
         });
         function uploadFile(file) {
             const formData = new FormData();
-            formData.append('file', file);
+            formData.append('file', file); // <--- RESTORED!
             statusDiv.textContent = 'Uploading...';
             fetch('/upload-csv', {
                 method: 'POST',
                 body: formData
             })
-            .then(r => r.json())
-            .then(data => {
-                statusDiv.textContent = data.detail || 'Upload successful!';
+            .then(async r => {
+                let data;
+                try { data = await r.json(); } catch (e) { data = {detail: 'Unknown error'}; }
+                return data;
             })
-            .catch(() => {
+            .then(data => {
+                if (data.user_id) {
+                    localStorage.setItem('user_id', data.user_id);
+                    statusDiv.textContent = 'Upload successful! Redirecting to recommendations...';
+                    setTimeout(() => {
+                        window.location.href = '/recommendations';
+                    }, 1000);
+                } else if (data.detail) {
+                    statusDiv.textContent = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail);
+                } else {
+                    statusDiv.textContent = 'Upload failed.';
+                }
+            })
+            .catch((err) => {
                 statusDiv.textContent = 'Error uploading file.';
             });
         }

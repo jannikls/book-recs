@@ -2,8 +2,9 @@ import os
 from rq import Queue
 from redis import Redis
 from sentence_transformers import SentenceTransformer
-from .models import Book
+from .models import Book, UserBook
 from .faiss_store import FaissStore
+FaissStore.init()
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy import create_engine
 
@@ -31,13 +32,16 @@ def encode_and_store_book_vector(book_id):
     vector = model.encode([text])[0].tolist()
     # Store vector in FAISS
     FaissStore.add_book_vector(book.id, vector)
-    # Optionally, persist vector in DB if desired
-    # book.vector = vector
-    # session.commit()
+    # Persist vector in DB
+    book.vector = vector
+    session.commit()
+    print(f"Enriched book {book.id}: {book.title}")
     session.close()
 
 def enqueue_all_books():
     session = SessionLocal()
-    for book in session.query(Book).all():
+    # Enqueue all books without a vector
+    books = session.query(Book).filter(Book.vector == None).all()
+    for book in books:
         q.enqueue(encode_and_store_book_vector, book.id)
     session.close()

@@ -42,9 +42,13 @@
 <body>
     <div class="container">
         <h2>Book Recommendations</h2>
-        <div class="user-input">
+        <div class="user-input" id="userInputDiv">
             <input id="userIdInput" type="number" min="1" placeholder="User ID">
             <button onclick="loadRecs()">Get Recommendations</button>
+        </div>
+        <div id="waitScreen" style="display:none;text-align:center;margin-top:2em;font-size:1.2em;">
+            <div>Preparing your recommendations...</div>
+            <div style="margin-top:1em;">This may take up to a minute after upload. Please wait.</div>
         </div>
         <div id="recList" class="rec-list"></div>
     </div>
@@ -75,15 +79,37 @@
                 recList.appendChild(card);
             });
         }
-        function loadRecs() {
-            const userId = document.getElementById('userIdInput').value;
+        function loadRecs(userIdOverride) {
+            let userId = userIdOverride || document.getElementById('userIdInput').value;
             if (!userId) return alert('Please enter a user ID.');
+            document.getElementById('waitScreen').style.display = 'block';
             fetch(`/recommend?user_id=${userId}&k=10`)
                 .then(r => r.json())
                 .then(data => {
-                    if (Array.isArray(data)) renderBooks(data);
-                    else alert(data.detail || 'No recommendations.');
+                    document.getElementById('waitScreen').style.display = 'none';
+                    if (Array.isArray(data)) {
+                        document.getElementById('userInputDiv').style.display = 'none';
+                        renderBooks(data);
+                    } else {
+                        // If enrichment is still running or no recs, show wait screen
+                        document.getElementById('waitScreen').innerHTML = (data.detail && data.detail.includes('highly rated books'))
+                            ? '<div>No recommendations yet. Please rate some books first.</div>'
+                            : `<div>${data.detail || 'Please wait while we prepare your recommendations...'}</div>`;
+                    }
+                })
+                .catch(() => {
+                    document.getElementById('waitScreen').innerHTML = '<div>Error loading recommendations. Please try again soon.</div>';
                 });
+        }
+
+        // On page load: auto-fill user id and auto-load recs if present
+        window.onload = function() {
+            const userId = localStorage.getItem('user_id');
+            if (userId) {
+                document.getElementById('userIdInput').value = userId;
+                document.getElementById('userInputDiv').style.display = 'none';
+                loadRecs(userId);
+            }
         }
         function rateBook(bookId, rating) {
             const userId = document.getElementById('userIdInput').value;

@@ -8,3 +8,10 @@ sqlalchemy
 alembic
 psycopg2-binary
 pydantic
+rq
+redis
+huggingface_hub[hf_xet]
+matplotlib
+scikit-learn
+numpy
+umap-learn

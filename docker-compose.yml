@@ -1,7 +1,9 @@
-version: '3.9'
 services:
   web:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: book-recs-web
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     volumes:
       - .:/app
@@ -30,7 +32,10 @@ services:
     ports:
       - "6379:6379"
   worker:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: book-recs-worker
     command: rq worker book-encoding
     depends_on:
       - web
@@ -40,12 +45,12 @@ services:
       - REDIS_URL=redis://redis:6379/0
     volumes:
       - .:/app
-  windsurf:
-    image: windsurf/frontend:latest
-    restart: always
-    ports:
-      - "3000:3000"
-    environment:
-      - API_URL=http://web:8000
+  # windsurf:
+  #   image: windsurf/frontend:latest
+  #   restart: always
+  #   ports:
+  #     - "3000:3000"
+  #   environment:
+  #     - API_URL=http://web:8000
 volumes:
   pgdata:

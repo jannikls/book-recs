@@ -4,7 +4,7 @@ from sqlalchemy.orm import sessionmaker
 from .models import Base, Book
 from .schemas import BookCreate
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:postgres@localhost:5432/bookrec")
+DATABASE_URL = os.environ["DATABASE_URL"]
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
