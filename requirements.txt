@@ -1,0 +1,10 @@
+pandas
+sentence-transformers
+faiss-cpu
+fastapi
+uvicorn
+python-multipart
+sqlalchemy
+alembic
+psycopg2-binary
+pydantic
